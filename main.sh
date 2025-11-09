@@ -10,6 +10,7 @@ check_root(){
 check_root
 
 SCRIPT_NAME="tunsel"
+INSTALL_DIR="/usr/local/bin"
 
 DEFAULT_WORKDIR="/usr/local/etc/$SCRIPT_NAME"
 mkdir -p "$DEFAULT_WORKDIR"
@@ -20,14 +21,28 @@ mkdir -p "$WG_DIR"
 OVPN_DIR="$DEFAULT_WORKDIR/openvpn"
 mkdir -p "$OVPN_DIR"
 
-WG_STATE="$DEFAULT_WORKDIR/active_wg.state"
-OVPN_PID="$DEFAULT_WORKDIR/active_ovpn.pid"
+WG_STATE_FILE="$DEFAULT_WORKDIR/active_wg.state"
+OVPN_PID_FILE="$DEFAULT_WORKDIR/active_ovpn.pid"
 
 ARGS=("$@")
 ARGS_COUNT="$#"
 
 info(){
     echo "$SCRIPT_NAME - Tunnel selector for Wireguard and OpenVPN protocols"
+}
+
+install_script(){
+    cp "$(realpath "$0")" "$INSTALL_DIR/$SCRIPT_NAME"
+    echo "[+] Script successfully installed as tunsel"
+}
+
+uninstall_script(){
+    if ! [[ -s "$INSTALL_DIR/$SCRIPT_NAME" ]];then
+        echo "[!] The script is not installed already" 
+        return
+    fi
+    rm -f "$INSTALL_DIR/$SCRIPT_NAME"
+    echo "[-] Script successfully uninstalled."
 }
 
 #   Argument parsing
@@ -44,6 +59,10 @@ argument_parser(){
         import_tunnel_file "${ARGS[@]:1}"    
     elif [[ "$ARGS_COUNT" -eq 1 && "${ARGS[0]}" == "list" ]];then
         list_tunnels
+    elif [[ "$ARGS_COUNT" -eq 1 && "${ARGS[0]}" == "install" ]];then
+        install_script
+    elif [[ "$ARGS_COUNT" -eq 1 && "${ARGS[0]}" == "uninstall" ]];then
+        uninstall_script
     elif [[ "$ARGS_COUNT" -eq 0 ]];then
         info
     else
@@ -53,12 +72,12 @@ argument_parser(){
 
 connection_status(){
     local up_epoch current_epoch connection_epoch formatted_up_time interface
-    if [[ -s "$WG_STATE" ]];then
-        connection_epoch=$(stat -c %Y "$WG_STATE")
-        interface="Wireguard: $(< $WG_STATE)"
-    elif [[ -s "$OVPN_PID" ]];then
-        connection_epoch=$(stat -c %Y "$OVPN_PID")
-        interface="OpenVPN PID: $(< $OVPN_PID)"
+    if [[ -s "$WG_STATE_FILE" ]];then
+        connection_epoch=$(stat -c %Y "$WG_STATE_FILE")
+        interface="Wireguard: $(< $WG_STATE_FILE)"
+    elif [[ -s "$OVPN_PID_FILE" ]];then
+        connection_epoch=$(stat -c %Y "$OVPN_PID_FILE")
+        interface="OpenVPN PID: $(< $OVPN_PID_FILE)"
     else
         echo "[*] Status: Disconnected"
         return 
@@ -123,7 +142,7 @@ list_tunnels(){
 }
 
 connect_tunnel(){
-    if [[ -s "$WG_STATE" || -s "$OVPN_PID" ]];then
+    if [[ -s "$WG_STATE_FILE" || -s "$OVPN_PID_FILE" ]];then
         if ! disconnect_tunnel;then
             echo "[!] Could not connected."
             exit 1
@@ -145,27 +164,27 @@ connect_tunnel(){
     
     if [[ "$software" == "$WG_DIR" ]];then
         if wg-quick up "${tunnels[$value-1]}" 1>/dev/null 2>&1;then
-            echo "${tunnels[$value-1]}" > "$WG_STATE"
+            echo "${tunnels[$value-1]}" > "$WG_STATE_FILE"
             echo "[+] Successfully connected to Wireguard $(basename "${tunnels[$value-1]}") tunnel."
         fi
     elif [[ "$software" == "$OVPN_DIR" ]];then
-        if openvpn --config "${tunnels[$value-1]}" --daemon --writepid "$OVPN_PID";then
+        if openvpn --config "${tunnels[$value-1]}" --daemon --writepid "$OVPN_PID_FILE";then
             echo "[+] Successfully connected to OpenVPN tunnel with PID $(basename "${tunnels[$value-1]}")"
         fi
     fi
 }
 
 disconnect_tunnel(){
-    if [[ -s "$WG_STATE" ]];then
-        local iface="$(< "$WG_STATE")"
+    if [[ -s "$WG_STATE_FILE" ]];then
+        local iface="$(< "$WG_STATE_FILE")"
         if wg-quick down "$iface" 1>/dev/null;then
-            rm -f "$WG_STATE"
+            rm -f "$WG_STATE_FILE"
             echo "[-] You successfully disconnected from Wireguard interface $iface."
         fi
-    elif [[ -s "$OVPN_PID" ]];then
-        local pid="$(< "$OVPN_PID")"
+    elif [[ -s "$OVPN_PID_FILE" ]];then
+        local pid="$(< "$OVPN_PID_FILE")"
         if kill "$pid" 1>/dev/null;then
-            rm -f "$OVPN_PID"
+            rm -f "$OVPN_PID_FILE"
             echo "[-] You successfully disconnected from OpenVPN interface which PID $pid."
         fi
     else
