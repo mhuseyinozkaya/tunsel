@@ -1,13 +1,35 @@
 #!/usr/bin/env bash
 
+color_support(){
+    RESET="\033[0m"
+    BLACK="\033[30m"
+    RED="\033[31m"
+    GREEN="\033[32m"
+    YELLOW="\033[33m"
+    BLUE="\033[34m"
+    MAGENTA="\033[35m"
+    CYAN="\033[36m"
+    WHITE="\033[37m"
+    if ! printf "%b" "$BLACK"; then
+        RESET=""
+        BLACK=""
+        RED=""
+        GREEN=""
+        YELLOW=""
+        BLUE=""
+        MAGENTA=""
+        CYAN=""
+        WHITE=""
+    fi
+    printf "%b" "$RESET"
+}
+
 check_root(){
     if [ "$(id -u)" -ne 0 ];then
-        echo "[!] Script requires privilege permission (use sudo)"
+        printf "%b[!] Script requires privilege permission %b(use sudo)\n" "$RED" "$RESET"
         exit 1
     fi
 }
-
-check_root
 
 SCRIPT_NAME="tunsel"
 INSTALL_DIR="/usr/local/bin"
@@ -31,18 +53,35 @@ info(){
     echo "$SCRIPT_NAME - Tunnel selector for Wireguard and OpenVPN protocols"
 }
 
+help_message(){
+    info
+    printf "\n"
+    printf "%bUsage:%b %s <command>\n" "$YELLOW" "$RESET" "$SCRIPT_NAME"
+    printf "\n"
+    printf "%bAvailable Commands:%b\n" "$YELLOW" "$RESET"
+    printf "  %b%-12s%b  - %bConnect to a Wireguard tunnel%b\n" "$CYAN" "wconnect" "$RESET" "$WHITE" "$RESET"
+    printf "  %b%-12s%b  - %bConnect to an OpenVPN tunnel%b\n" "$CYAN" "oconnect" "$RESET" "$WHITE" "$RESET"
+    printf "  %b%-12s%b  - %bDisconnect the active tunnel%b\n" "$CYAN" "disconnect" "$RESET" "$WHITE" "$RESET"
+    printf "  %b%-12s%b  - %bShow current connection status%b\n" "$CYAN" "status" "$RESET" "$WHITE" "$RESET"
+    printf "  %b%-12s%b  - %bImport tunnel config files (.conf or .ovpn)%b\n" "$CYAN" "import" "$RESET" "$WHITE" "$RESET"
+    printf "  %b%-12s%b  - %bList all imported tunnels%b\n" "$CYAN" "list" "$RESET" "$WHITE" "$RESET"
+    printf "  %b%-12s%b  - %bInstall the script to %s%b\n" "$CYAN" "install" "$RESET" "$WHITE" "$INSTALL_DIR/$SCRIPT_NAME" "$RESET"
+    printf "  %b%-12s%b  - %bUninstall the script%b\n" "$CYAN" "uninstall" "$RESET" "$WHITE" "$RESET"
+    printf "  %b%-12s%b  - %bShow this help message%b\n" "$CYAN" "help" "$RESET" "$WHITE" "$RESET"
+}
+
 install_script(){
     cp "$(realpath "$0")" "$INSTALL_DIR/$SCRIPT_NAME"
-    echo "[+] Script successfully installed as tunsel"
+    printf "%b[+] %bScript successfully installed as %btunsel%b\n" "$GREEN" "$RESET" "$CYAN" "$RESET"
 }
 
 uninstall_script(){
     if ! [[ -s "$INSTALL_DIR/$SCRIPT_NAME" ]];then
-        echo "[!] The script is not installed already" 
+        printf "%b[!] %bThe script is not installed already\n" "$RED" "$RESET"
         return
     fi
     rm -f "$INSTALL_DIR/$SCRIPT_NAME"
-    echo "[-] Script successfully uninstalled."
+    printf "%b[-] %bScript successfully uninstalled.\n" "$YELLOW" "$RESET"
 }
 
 #   Argument parsing
@@ -63,10 +102,12 @@ argument_parser(){
         install_script
     elif [[ "$ARGS_COUNT" -eq 1 && "${ARGS[0]}" == "uninstall" ]];then
         uninstall_script
+    elif [[ "$ARGS_COUNT" -eq 1 && "${ARGS[0]}" == "help" ]];then
+        help_message
     elif [[ "$ARGS_COUNT" -eq 0 ]];then
         info
     else
-        echo "[!] Unknown usage, for help use $0 help"
+        printf "%b[!] %bUnknown usage, for help use %b%s help%b\n" "$RED" "$RESET" "$YELLOW" "$(basename "$0")" "$RESET"
     fi
 }
 
@@ -77,16 +118,16 @@ connection_status(){
         interface="Wireguard: $(< $WG_STATE_FILE)"
     elif [[ -s "$OVPN_PID_FILE" ]];then
         connection_epoch=$(stat -c %Y "$OVPN_PID_FILE")
-        interface="OpenVPN PID: $(< $OVPN_PID_FILE)"
+        interface="OpenVPN PID:$MAGENTA $(< $OVPN_PID_FILE)"
     else
-        echo "[*] Status: Disconnected"
+        printf "%b[*] %bStatus: %bDisconnected%b\n" "$BLUE" "$RESET" "$YELLOW" "$RESET"
         return 
     fi
     current_epoch=$(date +%s)
     up_epoch=$((current_epoch - connection_epoch))
     formatted_up_time=$(date -u -d "@$up_epoch" +'%H:%M:%S')
-    echo "[*] Status: Connected, Uptime: $formatted_up_time"
-    echo "[*] Tunnel: $interface"
+    printf "%b[*]%b Status:%b Connected,%b Uptime: $formatted_up_time%b\n" "$BLUE" "$RESET" "$GREEN" "$YELLOW" "$RESET"
+    printf "%b[*]%b Tunnel:%b $interface%b\n" "$BLUE" "$RESET" "$YELLOW" "$RESET"
     return 0
 }
 
@@ -98,15 +139,15 @@ import_tunnel_file(){
         if [[ -s "$file_realpath" ]];then
             if [[ "$file_realpath" == *.conf ]];then
                 cp "$file_realpath" "$WG_DIR"
-                echo "[+] Wireguard tunnel $(basename "$file_realpath") successfully imported"
+                printf "%b[+]%b Wireguard tunnel %b%s%b successfully imported\n" "$GREEN" "$RESET" "$YELLOW" "$(basename "$file_realpath")" "$RESET"
             elif [[ "$file_realpath" == *.ovpn ]];then
                 cp "$file_realpath" "$OVPN_DIR"
-                echo "[+] OpenVPN tunnel $(basename "$file_realpath") successfully imported"
+                printf "%b[+]%b OpenVPN tunnel %b%s%b successfully imported\n" "$GREEN" "$RESET" "$YELLOW" "$(basename "$file_realpath")" "$RESET"
             else
-                echo "[!] Unknown file type for $(basename "$file_realpath"), only .ovpn and .conf supported"
+                printf "%b[!]%b Unknown file type for %b%s%b, only .conf and .ovpn extensions supported\n" "$RED" "$RESET" "$YELLOW" "$(basename "$file_realpath")" "$RESET"
             fi
         else
-            echo "[!] Import failed, file $(basename "$file_realpath") not found or empty"
+            printf "%b[!]%b Import failed, file %b%s%b not found or empty\n" "$RED" "$RESET" "$YELLOW" "$(basename "$file_realpath")" "$RESET"
         fi
     done
 }
@@ -128,15 +169,15 @@ list_tunnels(){
     shopt -u nullglob
 
     if [[ ${#tunnels[@]} -eq 0 ]];then
-        echo "[!] No tunnel file found to connect"
+        printf "%b[!] No tunnel file found to connect%b\n" "$RED" "$RESET"
         exit 1
     fi
 
     # Print messages
-    echo "$message"
+    printf "%b%s%b\n" "$YELLOW" "$message" "$RESET"
 
     for i in "${!tunnels[@]}"; do
-        echo "$((i + 1)). $(basename "${tunnels[i]}")"
+        printf "%d) %b%s%b\n" "$((i + 1))" "$YELLOW" "$(basename "${tunnels[i]}")" "$RESET"
     done
     return 0
 }
@@ -144,32 +185,32 @@ list_tunnels(){
 connect_tunnel(){
     if [[ -s "$WG_STATE_FILE" || -s "$OVPN_PID_FILE" ]];then
         if ! disconnect_tunnel;then
-            echo "[!] Could not connected."
+            printf "%b[!]%b Could not connected.\n" "$RED" "$RESET"
             exit 1
         fi
     fi
     local software="$1"
     list_tunnels "$software"
-    read -rp "[*] Please specify a tunnel to connect: " value
+    read -rp "${BLUE}[*]${RESET} Please specify a tunnel to connect: " value
 
     if ! [[ "$value" =~ ^[0-9]+$ ]];then
-        echo "[!] Invalid input: Please enter a number."
+        printf "%b[!] Invalid input: Please enter a number.%b\n" "$RED" "$RESET"
         return 1
     fi
     
     if [[ "$value" -lt 1 || "$value" -gt ${#tunnels[@]} ]];then
-        echo "[!] Invalid selection: Number out of range."
+        printf "%b[!] Invalid selection: Number out of range.%b\n" "$RED" "$RESET"
         return 1
     fi
     
     if [[ "$software" == "$WG_DIR" ]];then
         if wg-quick up "${tunnels[$value-1]}" 1>/dev/null 2>&1;then
             echo "${tunnels[$value-1]}" > "$WG_STATE_FILE"
-            echo "[+] Successfully connected to Wireguard $(basename "${tunnels[$value-1]}") tunnel."
+            printf "%b[+] Successfully connected to Wireguard %b%s%b tunnel.%b\n" "$GREEN" "$YELLOW" "$(basename "${tunnels[$value-1]}")" "$GREEN" "$RESET"
         fi
     elif [[ "$software" == "$OVPN_DIR" ]];then
         if openvpn --config "${tunnels[$value-1]}" --daemon --writepid "$OVPN_PID_FILE";then
-            echo "[+] Successfully connected to OpenVPN tunnel with PID $(basename "${tunnels[$value-1]}")"
+            printf "%b[+] Successfully connected to OpenVPN tunnel with PID %b%s%b\n" "$GREEN" "$YELLOW" "$(basename "${tunnels[$value-1]}")" "$RESET"
         fi
     fi
 }
@@ -179,22 +220,24 @@ disconnect_tunnel(){
         local iface="$(< "$WG_STATE_FILE")"
         if wg-quick down "$iface" 1>/dev/null;then
             rm -f "$WG_STATE_FILE"
-            echo "[-] You successfully disconnected from Wireguard interface $iface."
+            printf "%b[-] You successfully disconnected from Wireguard interface %b%s%b\n" "$YELLOW" "$WHITE" "$iface" "$RESET"
         fi
     elif [[ -s "$OVPN_PID_FILE" ]];then
         local pid="$(< "$OVPN_PID_FILE")"
         if kill "$pid" 1>/dev/null;then
             rm -f "$OVPN_PID_FILE"
-            echo "[-] You successfully disconnected from OpenVPN interface which PID $pid."
+            printf "%b[-] You successfully disconnected from OpenVPN interface which PID %b%d%b\n" "$YELLOW" "$WHITE" "$pid" "$RESET"
         fi
     else
-        echo "[!] You already disconnected."
+        printf "%b[!] You already disconnected.%b\n" "$RED" "$RESET"
         return 1
     fi
     return 0
 }
 
 main(){
+    color_support
+    check_root
     argument_parser
     exit 0;    
 }
