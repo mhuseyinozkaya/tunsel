@@ -71,7 +71,7 @@ help_message(){
 }
 
 install_script(){
-    cp "$(realpath "$0")" "$INSTALL_DIR/$SCRIPT_NAME"
+    cp -f "$(realpath "$0")" "$INSTALL_DIR/$SCRIPT_NAME"
     printf "%b[+] %bScript successfully installed as %btunsel%b\n" "$GREEN" "$RESET" "$CYAN" "$RESET"
 }
 
@@ -84,12 +84,28 @@ uninstall_script(){
     printf "%b[-] %bScript successfully uninstalled.\n" "$YELLOW" "$RESET"
 }
 
+print_usage(){
+    printf "%b[!] %bUnknown usage, for help use %b%s help%b\n" "$RED" "$RESET" "$YELLOW" "$(basename "$0")" "$RESET"
+}
+
 #   Argument parsing
 argument_parser(){
-    if [[ "$ARGS_COUNT" -eq 1 && "${ARGS[0]}" == "wconnect" ]];then
-        connect_tunnel "$WG_DIR"
-    elif [[ "$ARGS_COUNT" -eq 1 && "${ARGS[0]}" == "oconnect" ]];then
-        connect_tunnel "$OVPN_DIR"
+    if [[ "${ARGS[0]}" == "wconnect" ]];then
+        if [[ "$ARGS_COUNT" -eq 2 ]] && [[ -f "${ARGS[1]}" ]];then
+            connect_tunnel "$WG_DIR" "$(realpath "${ARGS[1]}")"
+        elif [[ "$ARGS_COUNT" -eq 1 ]];then
+            connect_tunnel "$WG_DIR"
+        else
+            print_usage
+        fi
+    elif [[ "${ARGS[0]}" == "oconnect" ]];then
+        if [[ "$ARGS_COUNT" -eq 2 ]] && [[ -f "${ARGS[1]}" ]];then
+            connect_tunnel "$OVPN_DIR" "$(realpath "${ARGS[1]}")" 
+        elif [[ "$ARGS_COUNT" -eq 1 ]];then
+            connect_tunnel "$OVPN_DIR"
+        else
+            print_usage
+        fi
     elif [[ "$ARGS_COUNT" -eq 1 && "${ARGS[0]}" == "disconnect" ]];then
         disconnect_tunnel
     elif [[ "$ARGS_COUNT" -eq 1 && "${ARGS[0]}" == "status" ]];then
@@ -107,7 +123,7 @@ argument_parser(){
     elif [[ "$ARGS_COUNT" -eq 0 ]];then
         info
     else
-        printf "%b[!] %bUnknown usage, for help use %b%s help%b\n" "$RED" "$RESET" "$YELLOW" "$(basename "$0")" "$RESET"
+        print_usage
     fi
 }
 
@@ -183,34 +199,45 @@ list_tunnels(){
 }
 
 connect_tunnel(){
+    # disconnect from previous session
     if [[ -s "$WG_STATE_FILE" || -s "$OVPN_PID_FILE" ]];then
         if ! disconnect_tunnel;then
-            printf "%b[!]%b Could not connected.\n" "$RED" "$RESET"
+            printf "%b[!]%b Could not connect, previous session active.\n" "$RED" "$RESET"
             exit 1
         fi
     fi
+    # define local variables
     local software="$1"
-    list_tunnels "$software"
-    read -rp "${BLUE}[*]${RESET} Please specify a tunnel to connect: " value
+    local file="$2" # assign realpath of file to variable
 
-    if ! [[ "$value" =~ ^[0-9]+$ ]];then
-        printf "%b[!] Invalid input: Please enter a number.%b\n" "$RED" "$RESET"
-        return 1
-    fi
+    if [[ -z "$file" ]];then
+        # that function creates global tunnels array at exit success
+        list_tunnels "$software"
+        read -rp "${BLUE}[*]${RESET} Please specify a tunnel to connect: " value
+        if ! [[ "$value" =~ ^[0-9]+$ ]];then
+            printf "%b[!] Invalid input: Please enter a number.%b\n" "$RED" "$RESET"
+            return 1
+        fi
     
-    if [[ "$value" -lt 1 || "$value" -gt ${#tunnels[@]} ]];then
-        printf "%b[!] Invalid selection: Number out of range.%b\n" "$RED" "$RESET"
-        return 1
+        if [[ "$value" -lt 1 || "$value" -gt ${#tunnels[@]} ]];then
+            printf "%b[!] Invalid selection: Number out of range.%b\n" "$RED" "$RESET"
+            return 1
+        fi
+        file="${tunnels[$value-1]}"
     fi
     
     if [[ "$software" == "$WG_DIR" ]];then
-        if wg-quick up "${tunnels[$value-1]}" 1>/dev/null 2>&1;then
-            echo "${tunnels[$value-1]}" > "$WG_STATE_FILE"
-            printf "%b[+] Successfully connected to Wireguard %b%s%b tunnel.%b\n" "$GREEN" "$YELLOW" "$(basename "${tunnels[$value-1]}")" "$GREEN" "$RESET"
+        if wg-quick up "$file" 1>/dev/null;then
+            echo "$file" > "$WG_STATE_FILE"
+            printf "%b[+] Successfully connected to Wireguard %b%s%b tunnel.%b\n" "$GREEN" "$YELLOW" "$(basename "$file")" "$GREEN" "$RESET"
+        else
+            printf "%b[!] Could not connect, please check tunnel file.%b\n" "$RED" "$RESET"
         fi
     elif [[ "$software" == "$OVPN_DIR" ]];then
-        if openvpn --config "${tunnels[$value-1]}" --daemon --writepid "$OVPN_PID_FILE";then
-            printf "%b[+] Successfully connected to OpenVPN tunnel with PID %b%s%b\n" "$GREEN" "$YELLOW" "$(basename "${tunnels[$value-1]}")" "$RESET"
+        if openvpn --config "$file" --daemon --writepid "$OVPN_PID_FILE";then
+            printf "%b[+] Successfully connected to OpenVPN tunnel%b\n" "$GREEN" "$RESET"
+        else
+            printf "%b[!] Could not connect, please check tunnel file.%b\n" "$RED" "$RESET"
         fi
     fi
 }
@@ -239,7 +266,7 @@ main(){
     color_support
     check_root
     argument_parser
-    exit 0;    
+    exit 0
 }
 
 main
