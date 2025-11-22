@@ -24,6 +24,23 @@ color_support(){
     printf "%b" "$RESET"
 }
 
+check_required_commands(){
+    local reqs=("wg" "openvpn")
+    local missing="false"
+    
+    for command in "${reqs[@]}"; do
+        if ! command -v "$command" >/dev/null 2>&1;then
+            missing="true"
+            printf "%b[!] Dependency missing: The script needs %b%s%b to run%b\n" "$RED" "$YELLOW" "$command" "$RED" "$RESET"
+        fi
+    done
+  
+    if [[ "$missing" == "true" ]]; then
+        printf "%b[!] Please install the missing dependencies and try again.%b\n" "$RED" "$RESET"
+        exit 1
+    fi
+}
+
 check_root(){
     if [ "$(id -u)" -ne 0 ];then
         printf "%b[!] Script requires privilege permission %b(use sudo)\n" "$RED" "$RESET"
@@ -264,6 +281,7 @@ disconnect_tunnel(){
 
 main(){
     color_support
+    check_required_commands
     check_root
     argument_parser
     exit 0
