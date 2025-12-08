@@ -230,7 +230,7 @@ connect_tunnel(){
     if [[ -z "$file" ]];then
         # that function creates global tunnels array at exit success
         list_tunnels "$software"
-        read -rp "${BLUE}[*]${RESET} Please specify a tunnel to connect: " value
+        read -rp "[*] Please specify a tunnel to connect: " value
         if ! [[ "$value" =~ ^[0-9]+$ ]];then
             printf "%b[!] Invalid input: Please enter a number.%b\n" "$RED" "$RESET"
             return 1
